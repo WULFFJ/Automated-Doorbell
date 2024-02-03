@@ -80,7 +80,7 @@ Ca.crt
 ********Home Assistant Device configuration.yaml
 Add the following:
 
- # Telegram Bot
+
 telegram_bot:
   - platform: polling
     api_key: "YOURLONGAPIKEYHERE"
