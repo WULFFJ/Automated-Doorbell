@@ -87,6 +87,10 @@ telegram_bot:
     allowed_chat_ids:
       - YourChatIDHERE
 
+#Helpful reminders
+sudo dpkg-reconfigure mumble-server after installing Mumble-Server to setup SuperUser Password
+sudo nano /etc/mumble-server.ini configure the options for Mumble-Server
+
 
 ***Python Script Doorbell.py
 Make a copy of the client.crt, client.key and ca.crt and place them on your device acting as the doorbell.
