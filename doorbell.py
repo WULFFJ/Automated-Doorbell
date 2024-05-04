@@ -3,17 +3,16 @@ import RPi.GPIO as GPIO
 import os
 import time
 import datetime
+import ffmpeg
 import requests
 import random
 import json
 import ssl
 import paho.mqtt.client as mqtt
-from queue import Queue, Empty
-
-counter=0
 
 client = mqtt.Client("FrontDoor")
-client.username_pw_set("doorbell", "Oxxxxxxcxxx")  # Replace with your MQTT broker's username and password
+client.username_pw_set("XXXMQTTUSERXXX", "XXXPASSWORDXXX")  # Replace with your MQTT broker's username and password
+
 
 device_info = {
     "identifiers": ["pi_zero_2"],  # A unique identifier for your device
@@ -22,11 +21,12 @@ device_info = {
     "manufacturer": "Raspberry Pi Foundation"  # The manufacturer of your device
 }
 
+
 # Set the TLS parameters
 client.tls_set(
-    ca_certs="/pathto/cert/ca.crt",
-    certfile="/pathto/cert/client.crt",
-    keyfile="/pathto/cert/client.key",
+    ca_certs="/home/homeaccount/cert/ca.crt",
+    certfile="/home/homeaccount/cert/client.crt",
+    keyfile="/home/homeaccount/cert/client.key",
     cert_reqs=ssl.CERT_REQUIRED,
     tls_version=ssl.PROTOCOL_TLS,
     ciphers=None
@@ -34,26 +34,29 @@ client.tls_set(
 
 client.tls_insecure_set(True)  # Allow self-signed certificates
 
-client.connect("192.xxx.x.xxx",8883)  # Replace with the IP address of your Home Assistant Device
+client.connect("IP FOR OTHER DEVICE CONNECTING TO",8883)  # Replace with the IP address of your Rock 5B
 client.loop_start()
 # Usage
-bot_token = 'xxxxbottokenidxxxx'
-chat_id = 'chatid'
+bot_token = 'Telegram API Token'
+chat_id = 'Telegram Chat ID'
 text = 'Front Door Motion Detected'
 
 # This variable will be used to control the motion detection
 motion_detection_enabled = True
 
 GPIO.setmode(GPIO.BCM)
-pin_to_circuit = 12
+pin_to_circuit = 27
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(4, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-gdir = "/home/homeaccount/sounds/"
-imagedir = "/home/homeaccount/images/"
+gdir = "/path_to_sounds/sounds/"
+imagedir = "/image/path/images/"
 width = 1920
 height = 1080
-dgreeting = '/home/homeaccount/sounds/buttonpush/buttongreeting.mp3'
+stream_url = 'rtsp://url if you have rtsp'
+dgreeting = '/path/to/greeting/buttongreeting.mp3'
 sounds = ['Greet1.mp3', 'Greet2.mp3', 'Greet3.mp3', 'Greet4.mp3', 'Greet5.mp3', 'Greet6.mp3','Greet7.mp3', 'Greet8.mp3','Greet9.mp3', 'Greet10.mp3']
+
+counter = 0
 
 def motion_message(chat_id,text,bot_token):
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
@@ -64,12 +67,12 @@ def motion_message(chat_id,text,bot_token):
 def still_capture1():
     xdate = datetime.datetime.now().strftime("%m%d%Y"+"-"+"%H%M%S")
     output_image = imagedir + 'snap' + xdate + '.jpg'
-    os.system(f'libcamera-still -t 1 -o {output_image}')
+    ffmpeg.input(stream_url, t=0.1).output(output_image, vframes=1, vf='scale={}:{}'.format(width, height)).run()
 
 def still_capture2():
     xdate = datetime.datetime.now().strftime("%m%d%Y"+"-"+"%H%M%S")
     output_image = imagedir + 'snap' + xdate + '.jpg'
-    os.system(f'libcamera-still -t 1 -o {output_image}')
+    ffmpeg.input(stream_url, t=0.1).output(output_image, vframes=1, vf='scale={}:{}'.format(width, height)).run()
     return output_image
 
 def send_photo(chat_id, output_image, bot_token):
@@ -115,8 +118,14 @@ def enable_motion_detection():
 
 def motion_detected(channel):
     global counter
-    global motion_detection_enabled          
-    motion_message(chat_id, text, bot_token)
+    global motion_detection_enabled
+    if motion_detection_enabled:
+      client.publish("doorbell/motion_detected", "Motion detected")
+      if counter == 0:
+          # Play gong sound
+          os.system('mpg123 -q /home/homeaccount/sounds/Gong.mp3')
+          still_capture1()
+          motion_message(chat_id, text, bot_token)
           counter += 1
       elif counter == 1:
           sound = random.choice(sounds)
@@ -161,15 +170,3 @@ try:
 except KeyboardInterrupt:
     # Cleanup the GPIO when exiting
     GPIO.cleanup()
-
-def delete_old_files_every_day():
-    while True:
-        time.sleep(86400)  # Sleep for 24 hours
-
-    if motion_detection_enabled:
-      client.publish("doorbell/motion_detected", "Motion detected")
-      if counter == 0:
-          # Play gong sound
-          os.system('mpg123 -q /path/to/Gong.mp3')
-          still_capture1()
-
