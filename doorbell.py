@@ -3,15 +3,15 @@ import RPi.GPIO as GPIO
 import os
 import time
 import datetime
-import ffmpeg
+from picamera2 import Picamera2
 import requests
 import random
 import json
 import ssl
 import paho.mqtt.client as mqtt
 
-client = mqtt.Client("FrontDoor")
-client.username_pw_set("XXXMQTTUSERXXX", "XXXPASSWORDXXX")  # Replace with your MQTT broker's username and password
+client = mqtt.Client("yourclientnamehere")
+client.username_pw_set("homeassistantuser", "HomeAssistantPassword")  # Replace with your MQTT broker's username and password
 
 
 device_info = {
@@ -24,9 +24,9 @@ device_info = {
 
 # Set the TLS parameters
 client.tls_set(
-    ca_certs="/home/homeaccount/cert/ca.crt",
-    certfile="/home/homeaccount/cert/client.crt",
-    keyfile="/home/homeaccount/cert/client.key",
+    ca_certs="/path/to/ca.crt",
+    certfile="/path/to/client.crt",
+    keyfile="/path/to/client.key",
     cert_reqs=ssl.CERT_REQUIRED,
     tls_version=ssl.PROTOCOL_TLS,
     ciphers=None
@@ -34,30 +34,30 @@ client.tls_set(
 
 client.tls_insecure_set(True)  # Allow self-signed certificates
 
-client.connect("IP FOR OTHER DEVICE CONNECTING TO",8883)  # Replace with the IP address of your Rock 5B
+client.connect("yoourdeviceip",8883)  # Replace with the IP address of your Rock 5B
 client.loop_start()
 # Usage
-bot_token = 'Telegram API Token'
-chat_id = 'Telegram Chat ID'
+bot_token = 'telegramtoken'
+chat_id = 'telegramchatid'
 text = 'Front Door Motion Detected'
+
 
 # This variable will be used to control the motion detection
 motion_detection_enabled = True
 
 GPIO.setmode(GPIO.BCM)
-pin_to_circuit = 27
+pin_to_circuit = 12
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(4, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-gdir = "/path_to_sounds/sounds/"
-imagedir = "/image/path/images/"
+gdir = "/home/homeaccount/sounds/"
+imagedir = "/home/homeaccount/images"
 width = 1920
 height = 1080
 stream_url = 'rtsp://url if you have rtsp'
-dgreeting = '/path/to/greeting/buttongreeting.mp3'
+dgreeting = '/home/homeaccount/sounds/buttonpush/buttongreeting.mp3'
 sounds = ['Greet1.mp3', 'Greet2.mp3', 'Greet3.mp3', 'Greet4.mp3', 'Greet5.mp3', 'Greet6.mp3','Greet7.mp3', 'Greet8.mp3','Greet9.mp3', 'Greet10.mp3']
 
 counter = 0
-
 def motion_message(chat_id,text,bot_token):
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     data = {'chat_id': chat_id, 'text': text}
@@ -65,14 +65,25 @@ def motion_message(chat_id,text,bot_token):
     return response.json()
 
 def still_capture1():
+    picam2 = Picamera2()
+    camera_config = picam2.create_still_configuration(main={"size": (1920, 1080)}, lores={"size": (640, 480)}, display="lores")
+    picam2.configure(camera_config)
+    picam2.start()
     xdate = datetime.datetime.now().strftime("%m%d%Y"+"-"+"%H%M%S")
     output_image = imagedir + 'snap' + xdate + '.jpg'
-    ffmpeg.input(stream_url, t=0.1).output(output_image, vframes=1, vf='scale={}:{}'.format(width, height)).run()
+    picam2.capture_file(output_image)
+    picam2.close()
+    return output_image
 
 def still_capture2():
+    picam2 = Picamera2()
+    camera_config = picam2.create_still_configuration(main={"size": (1920, 1080)}, lores={"size": (640, 480)}, display="lores")
+    picam2.configure(camera_config)
+    picam2.start()
     xdate = datetime.datetime.now().strftime("%m%d%Y"+"-"+"%H%M%S")
     output_image = imagedir + 'snap' + xdate + '.jpg'
-    ffmpeg.input(stream_url, t=0.1).output(output_image, vframes=1, vf='scale={}:{}'.format(width, height)).run()
+    picam2.capture_file(output_image)
+    picam2.close()
     return output_image
 
 def send_photo(chat_id, output_image, bot_token):
@@ -93,6 +104,10 @@ def send_photo2(chat_id, output_image, bot_token):
         response = requests.post(url, files=files, data=data)
     return response.json()
 
+def enable_motion_detection():
+    global motion_detection_enabled
+    motion_detection_enabled = True
+
 def button_pressed(channel):
     global motion_detection_enabled
     # Disable motion detection for 2 minutes
@@ -100,7 +115,6 @@ def button_pressed(channel):
     threading.Timer(120, enable_motion_detection).start()
     # Publish button pressed event to MQTT broker
     client.publish("doorbell/button_pressed", "doorbell")
-
     global counter
     global doorgreeting
     if GPIO.input(4) == False: # If button is pressed
@@ -109,12 +123,7 @@ def button_pressed(channel):
         send_photo(chat_id, output_image, bot_token)
         time.sleep(0.2) # Debounce
 
-
 GPIO.add_event_detect(4, GPIO.FALLING, callback=button_pressed, bouncetime=200)
-
-def enable_motion_detection():
-    global motion_detection_enabled
-    motion_detection_enabled = True
 
 def motion_detected(channel):
     global counter
